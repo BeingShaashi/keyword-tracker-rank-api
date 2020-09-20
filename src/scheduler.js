@@ -11,7 +11,7 @@ module.exports = async () => {
   // rule.hour = [12, 24];
   // rule.minute = 0;
 
-  rule.minute = new schedule.Range(0, 59, 1);
+  rule.minute = new schedule.Range(0, 59, 5);
 
   console.log("Scheduling capture: ", rule);
 
@@ -38,6 +38,11 @@ const captureRankings = async () => {
       .filter((x) => x.provider === "amazon")
       .map(async (x) => {
         const amazonResult = await puppeteerService.amazon.getRanking(x);
+        if (!amazonResult || !amazonResult.rank)
+          throw new Error(
+            "Error getting result " + JSON.stringify({ amazonResult, query: x })
+          );
+
         await Ranking.create({
           absoluteRank: amazonResult.rank,
           pageCount: amazonResult.pageCount,
@@ -50,6 +55,6 @@ const captureRankings = async () => {
 
     await Promise.all(promises);
   } catch (error) {
-    console.log("Error executing bootstrap: ", error);
+    console.log("Error executing scheduler: ", error);
   }
 };

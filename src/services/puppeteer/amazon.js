@@ -30,7 +30,7 @@ exports.getRanking = async ({ keyword, productId }) => {
   if (page) {
     setTimeout(() => {
       page.close().catch((e) => debug("Error closing page: ", e.message));
-    }, 5000);
+    }, 10000);
   }
 
   return result;
@@ -102,29 +102,38 @@ const getSearchResults = async (page) => {
 };
 
 const paginateNext = async (page) => {
-  await page.waitForSelector('[cel_widget_id="MAIN-PAGINATION"]');
+  await page.waitForSelector("li.a-last");
 
-  const success = await page.$eval(
-    '[cel_widget_id="MAIN-PAGINATION"]',
-    (el) => {
-      if (!el) {
-        console.log(
-          'Selector not found for pagination: cel_widget_id="MAIN-PAGINATION"'
-        );
-        return false;
-      }
-      console.log("Pagination component found", el);
+  const success = await page.evaluate(() => {
+    const regex = new RegExp('cel_widget_id="MAIN-PAGINATION.*"', "gmi");
 
-      let nextBtn = el.querySelector("li.a-last");
-      let nextBtnLink = nextBtn && nextBtn.firstElementChild;
-      console.log("Next btn link: ", nextBtnLink);
+    // search the element for specific word
+    const matchOuterHTML = (e) => regex.test(e.outerHTML);
 
-      if (nextBtnLink) {
-        nextBtnLink.click();
-        return true;
-      }
+    // array of elements
+    const elementArray = [...document.querySelectorAll("span.celwidget")];
+
+    // return filtered element list
+    let el = elementArray.filter(matchOuterHTML)[0];
+
+    console.log("Evaluated: ", el);
+    if (!el) {
+      console.log(
+        'Selector not found for pagination: cel_widget_id="MAIN-PAGINATION"'
+      );
+      return false;
     }
-  );
+    console.log("Pagination component found", el);
+
+    let nextBtn = el.querySelector("li.a-last");
+    let nextBtnLink = nextBtn && nextBtn.firstElementChild;
+    console.log("Next btn link: ", nextBtnLink);
+
+    if (nextBtnLink) {
+      nextBtnLink.click();
+      return true;
+    }
+  });
 
   return success;
 };
@@ -135,10 +144,16 @@ const loopOverToGetRank = async ({ page, keyword, productId, limit }) => {
   let i;
   for (i = 1; i <= limit; ++i) {
     await page.waitForSelector('[data-component-type="s-search-results"]');
-    await page.waitForSelector('[cel_widget_id="MAIN-PAGINATION"]');
 
     const searchResults = await getSearchResults(page);
-    debug({ searchResults, keyword, productId, pageCount: i });
+    debug({
+      searchResults:
+        searchResults &&
+        JSON.stringify(searchResults.map((x) => x["data-asin"])),
+      keyword,
+      productId,
+      pageCount: i,
+    });
 
     const matchIndex = searchResults.findIndex(
       (x) => x && x["data-asin"] === productId
@@ -163,6 +178,8 @@ const loopOverToGetRank = async ({ page, keyword, productId, limit }) => {
       };
       return result;
     } else {
+      rank += (searchResults && searchResults.length) || 0;
+
       let success = await paginateNext(page).catch((e) => {
         debug(e);
         return false;
